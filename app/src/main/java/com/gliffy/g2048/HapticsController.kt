@@ -32,7 +32,13 @@ class HapticsController(private val context: Context) {
 
     private fun buzz(pattern: LongArray, repeat: Int = -1) {
         if (!enabled || vibrator == null) return
-        vibrator.vibrate(VibrationEffect.createWaveform(pattern, repeat))
+        try {
+            vibrator.vibrate(VibrationEffect.createWaveform(pattern, repeat))
+        } catch (_: Exception) {
+            // A restrictive device policy (work profile, accessibility
+            // override, AOSP build without VIBRATE) may deny the call —
+            // haptics are cosmetic; never take the game down over them.
+        }
     }
 
     /** Swipe-move tick: one short pulse. */
