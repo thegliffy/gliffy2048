@@ -254,14 +254,14 @@ internal fun TileGlyph(
     bg: Color,
     fg: Color,
 ) {
+    // Auto-fit: scale the glyph so the number fills the tile's inner square
+    // — as large as it can get while guaranteed to fit (height-cap for short
+    // numbers, width-cap for long ones).
     val digits = value.toString().length
-    val fontSize = (cell.value * when (digits) {
-        1 -> 0.44f
-        2 -> 0.40f
-        3 -> 0.34f
-        4 -> 0.26f
-        else -> 0.21f
-    }).sp
+    val inner = cell.value * 0.84f
+    val hFit = inner * 0.82f
+    val wFit = inner / (digits * 0.58f)
+    val fontSize = minOf(hFit, wFit).sp
     Box(
         modifier = Modifier
             .offset(x = x, y = y)
