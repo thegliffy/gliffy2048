@@ -4,8 +4,9 @@ import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import kotlin.math.PI
-import kotlin.math.exp
 import kotlin.math.sin
 
 /**
@@ -17,6 +18,12 @@ import kotlin.math.sin
  * ear safe from harmful overlaps. On Android O+ volume is looked up from
  * the system AudioManager; the local [self] flag remains the app pairing
  * toggle that decides whether we ever emit a sample.
+ *
+ * Every blocking audio operation (track creation, PCM write, play) is
+ * dispatched to a single dedicated [worker] thread so the UI thread is
+ * never stalled by an audio-stream open — the usual cause of first-frame
+ * jank and ANR-style slowdowns. Playback is serialized on that thread so
+ * we keep at most one live track and a clean stop() is always race-free.
  */
 class AudioController(ctx: Context) {
     @Volatile var enabled: Boolean = true
@@ -32,7 +39,17 @@ class AudioController(ctx: Context) {
     }
 
     private val sampleRate = 44_100
+
+    // All access to [track] is guarded by the monitor (this). The public
+    // [stop] and the serialized worker both go through it, so there is no
+    // window where a dead track is released twice or a stale one is kept.
     private var track: AudioTrack? = null
+        private set
+
+    // Single background worker; daemon so it never blocks process exit.
+    private val worker: ExecutorService = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "G2048-audio").apply { isDaemon = true }
+    }
 
     private fun createTrack(): AudioTrack =
         AudioTrack.Builder()
@@ -51,19 +68,18 @@ class AudioController(ctx: Context) {
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
 
-    private fun finishReady(): Boolean {
-        val t = track ?: return false
-        t.play()
-        return true
-    }
-
-    private fun stop() {
+    /** Caller must hold the monitor ([this]). */
+    private fun releaseCurrentLocked() {
         track?.let {
             try { it.stop() } catch (_: IllegalStateException) {}
             it.release()
         }
         track = null
     }
+
+    /** Stop and release any live track. Safe to call from any thread. */
+    @Synchronized
+    fun stop() = releaseCurrentLocked()
 
     private fun envelope(n: Int, attack: Int, decay: Float): FloatArray {
         val s = FloatArray(n)
@@ -73,27 +89,43 @@ class AudioController(ctx: Context) {
         return s
     }
 
+    /**
+     * Run blocking audio work off-thread. [work] must return the freshly
+     * created track (or null to cancel); the monitor swap that retires the
+     * previous track, installs the new one and starts it happens inside the
+     * single serialized block so start ordering is always well-defined.
+     */
+    private fun startTrack(work: () -> AudioTrack?) {
+        if (!enabled) return
+        worker.execute {
+            val t = try { work() } catch (e: Exception) { null } ?: return@execute
+            synchronized(this) {
+                if (!enabled) { t.release(); return@synchronized }
+                releaseCurrentLocked()
+                track = t
+                try { t.play() } catch (e: Exception) { t.release(); track = null }
+            }
+        }
+    }
+
     /** Frequency sweep with a simple exponential decay envelope. */
     private fun playSweep(fromHz: Double, toHz: Double, durMs: Int, gain: Float) {
         if (!enabled) return
-        stop()
         val n = (sampleRate * durMs / 1000).coerceAtLeast(16)
-        val t = createTrack()
-        track = t
-        try {
-            val env = envelope(n, (n * 0.05f).toInt(), gain)
-            val buf = ShortArray(n)
-            var phase = 0.0
-            val step0 = fromHz * 2 * PI / sampleRate
-            val step1 = toHz * 2 * PI / sampleRate
-            for (i in 0 until n) {
-                phase += step0 + (step1 - step0) * i / n
-                buf[i] = (sin(phase) * env[i]).toInt().shr(1).toShort()
-            }
-            t.write(buf, 0, n)
-            finishReady()
-        } catch (e: Exception) {
-            t.release()
+        val env = envelope(n, (n * 0.05f).toInt(), gain)
+        val buf = ShortArray(n)
+        var phase = 0.0
+        val step0 = fromHz * 2 * PI / sampleRate
+        val step1 = toHz * 2 * PI / sampleRate
+        for (i in 0 until n) {
+            phase += step0 + (step1 - step0) * i / n
+            // -> short value
+            buf[i] = Math.round(sin(phase) * env[i] * Short.MAX_VALUE).toShort()
+        }
+        startTrack {
+            val t = createTrack()
+            t.write(buf, 0, n)   // blocking: this is why it must be off-thread
+            t
         }
     }
 
@@ -106,14 +138,12 @@ class AudioController(ctx: Context) {
     }
 
     fun win() {
-        // Tiny arpeggio: three short ascending notes in sequence.
-        stop()
-        val notes = listOf(523.25, 659.25, 783.99)
-        val t = createTrack()
-        track = t
-        try {
+        // Tiny arpeggio: three short ascending notes in one buffer.
+        startTrack {
+            val t = createTrack()
             val n = sampleRate * 300 / 1000
             val buf = ShortArray(n)
+            val notes = listOf(523.25, 659.25, 783.99)
             val per = n / notes.size
             for (k in notes.indices) {
                 var ph = 0.0
@@ -121,13 +151,12 @@ class AudioController(ctx: Context) {
                 for (i in 0 until per) {
                     ph += f
                     val env = kotlin.math.cos((i.toDouble() / per) * PI)
-                    buf[k * per + i] = (sin(ph) * env * 0.5).toInt().shr(1).toShort()
+                    buf[k * per + i] =
+                        Math.round(sin(ph) * env * 0.5 * Short.MAX_VALUE).toShort()
                 }
             }
             t.write(buf, 0, n)
-            finishReady()
-        } catch (e: Exception) {
-            t.release()
+            t
         }
     }
 
