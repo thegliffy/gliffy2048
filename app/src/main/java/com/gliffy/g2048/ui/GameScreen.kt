@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,6 +61,8 @@ import com.gliffy.g2048.game.GameMode
 fun GameScreen() {
     val ctx = LocalContext.current
     val app = Game2048App.instance
+    // True on cold start when there is nothing to resume — greet via menu.
+    val firstLaunch = app.prefs.liveState == null
     val machine = remember(app) { GameMachine(app.prefs, app.haptics, app.audio) }
     val ui by machine.ui.collectAsState()
     val systemDark = isSystemInDarkTheme()
@@ -70,6 +73,7 @@ fun GameScreen() {
     }
 
     var showSettings by remember { mutableStateOf(false) }
+    var showMenu by remember(firstLaunch) { mutableStateOf(firstLaunch) }
     var keepGoingDismissed by remember { mutableStateOf(false) }
 
     GameTheme(dark = isDark) {
@@ -83,7 +87,7 @@ fun GameScreen() {
                     .fillMaxSize()
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
-                // ---- header row: title / new / undo / settings ----
+                // ---- header row: title / menu / new / undo / settings ----
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -95,6 +99,13 @@ fun GameScreen() {
                         color = if (isDark) Palette.textDark else Palette.textLight,
                     )
                     Spacer(Modifier.weight(1f))
+                    IconButton(onClick = { machine.uiTap(); showMenu = true }) {
+                        Text(
+                            text = "☰",
+                            fontSize = 20.sp,
+                            color = if (isDark) Palette.textDark else Palette.textLight,
+                        )
+                    }
                     IconButton(onClick = { machine.uiTap(); machine.newGame(ui.state.daily) }) {
                         Text(
                             text = "+",
@@ -151,6 +162,28 @@ fun GameScreen() {
                 )
             }
 
+            // ---- main menu overlay ----
+            if (showMenu) {
+                MainMenuOverlay(
+                    isDark = isDark,
+                    canResume = !firstLaunch && !ui.state.isOver(),
+                    dailyDate = machine.dailyDateLabel(),
+                    onNewGame = {
+                        machine.uiTap()
+                        machine.newGame(false)
+                        showMenu = false
+                    },
+                    onDaily = {
+                        machine.uiTap()
+                        machine.newGame(true)
+                        showMenu = false
+                    },
+                    onResume = {
+                        machine.uiTap()
+                        showMenu = false
+                    },
+                )
+            }
             // ---- settings overlay ----
             if (showSettings) {
                 SettingsOverlay(
@@ -183,8 +216,80 @@ fun GameScreen() {
                     primaryLabel = "Try again",
                     secondaryLabel = "Main menu",
                     onPrimary = { machine.newGame(ui.state.daily) },
-                    onSecondary = { showSettings = true },
+                    onSecondary = {
+                        showMenu = true
+                        showSettings = false
+                    },
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MainMenuOverlay(
+    isDark: Boolean,
+    canResume: Boolean,
+    dailyDate: String,
+    onNewGame: () -> Unit,
+    onDaily: () -> Unit,
+    onResume: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(if (isDark) Palette.pageDark else Palette.pageLight),
+        contentAlignment = Alignment.Center,
+    ) {
+        Card(
+            modifier = Modifier.padding(24.dp).width(260.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isDark) Palette.boardDark else Color(0xFFF7F0E5),
+            ),
+            shape = RoundedCornerShape(16.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                // Title rendered as a 2048-style tile.
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .background(Color(0xFFEDC22E), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "2048",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = onNewGame, modifier = Modifier.fillMaxWidth()) {
+                    Text("New game")
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = onDaily, modifier = Modifier.fillMaxWidth()) {
+                    Text("Daily challenge")
+                }
+                Text(
+                    text = "Same seed for everyone: $dailyDate",
+                    fontSize = 11.sp,
+                    color = if (isDark) Palette.textSubDark else Palette.textSubLight,
+                    textAlign = TextAlign.Center,
+                )
+                if (canResume) {
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = onResume,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isDark) Color(0xFF6C5CA7) else Color(0xFF8F7A66),
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Resume last game") }
+                }
             }
         }
     }
