@@ -1,7 +1,5 @@
 package com.gliffy.g2048.ui
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
@@ -111,9 +109,3 @@ private fun gameTypography() = Typography(
     bodyLarge = TextStyle(fontSize = 15.sp),
     labelLarge = TextStyle(fontWeight = FontWeight.W600, fontSize = 13.sp),
 )
-
-object Easing {
-    val slide = FastOutSlowInEasing
-    val pop = FastOutSlowInEasing
-    val overlay = LinearOutSlowInEasing
-}

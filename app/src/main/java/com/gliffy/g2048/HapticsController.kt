@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.VibrationEffect
 import android.os.VibratorManager
 import android.os.Build
-import android.view.HapticFeedbackConstants
 
 /**
  * Thin wrapper over the system vibrator with a built-in "enabled" flag so

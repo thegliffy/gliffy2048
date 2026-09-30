@@ -95,7 +95,7 @@ fun BoardPanel(
                     val down = awaitFirstDown()
                     val sx = down.position.x
                     val sy = down.position.y
-                    val threshold = boardPx * 0.05f
+                    val threshold = maxOf(24f, boardPx * 0.06f)
                     var fired = false
                     while (true) {
                         val ch = awaitPointerEvent().changes.first()

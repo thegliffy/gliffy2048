@@ -33,10 +33,12 @@ class AudioController(ctx: Context) {
     private val ctx = ctx.applicationContext
     private val manager =
         ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-    private val streamType = when {
-        android.os.Build.VERSION.SDK_INT >= 31 -> AudioManager.STREAM_VOICE_CALL
-        else -> AudioManager.STREAM_MUSIC
-    }
+
+    // Game sfx always ride STREAM_MUSIC: STREAM_VOICE_CALL is tied to call
+    // volume (often near-silent outside a call) and conflicts with in-call
+    // audio. The AudioAttributes usage below is what modern Android routes
+    // by; the legacy streamType only matters on pre-O devices.
+    private val streamType = AudioManager.STREAM_MUSIC
 
     private val sampleRate = 44_100
 

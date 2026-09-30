@@ -125,6 +125,10 @@ class EngineErrorTest {
         assertNull(Game.State.deserialize(neg))
         val huge = "4;0;0;0;0;0;7|1:999:999:2"
         assertNull(Game.State.deserialize(huge))
+        // Out-of-bounds tiles must also be rejected when the board is full
+        // (the freeCells count check alone would let these through).
+        val fullOob = "2;0;0;0;0;0;7|1:9:0:2,2:0:1:2,3:1:0:2,4:1:1:2"
+        assertNull(Game.State.deserialize(fullOob))
     }
 
     @Test
@@ -137,8 +141,9 @@ class EngineErrorTest {
 
     @Test
     fun deserializeAcceptsValidMaxBoard() {
-        // Legal: 2x2 fully and densely packed.
-        val ok = "2;50;12;0;0;0|1:0:0:4,2:0:1:8,3:1:0:16,4:1:1:32"
+        // Legal: 2x2 fully and densely packed. Header needs 7 fields
+        // (size;score;moves;keep;won;daily;rngseed).
+        val ok = "2;50;12;0;0;0;7|1:0:0:4,2:0:1:8,3:1:0:16,4:1:1:32"
         val st = Game.State.deserialize(ok)
         assertNotNull(st)
         val s = st!!
@@ -152,7 +157,7 @@ class EngineErrorTest {
     @Test
     fun fullBoardNoMergeReturnsNullAndIsOver() {
         val st = Game.State(4, Rng(42L))
-        st.tiles.clear()
+        st.tiles.clear(); st.reindex()
         // 2/4 checkerboard: no equal neighbors -> legally stuck when full
         var i = 0
         for (r in 0 until 4) for (c in 0 until 4) {

@@ -19,9 +19,8 @@ class Prefs(context: Context) {
         get() = prefs.getString(KEY_LIVE_STATE, null)
         set(v) = prefs.edit().putString(KEY_LIVE_STATE, v).apply()
 
-    var liveSeed: String?
-        get() = prefs.getString(KEY_LIVE_SEED, null)
-        set(v) = prefs.edit().putString(KEY_LIVE_SEED, v).apply()
+    // NOTE: the live RNG seed is embedded in liveState itself
+    // (Game.State.serialize carries rng.state) — no separate liveSeed key.
 
     /** Best scores keyed by "$mode-$size" (e.g. "classic-4", "daily-6"). */
     fun best(key: String): Int = prefs.getInt(key, 0)
@@ -71,6 +70,5 @@ class Prefs(context: Context) {
         const val KEY_DAILY_SEED = "dSeed"
         const val KEY_LAST_DAILY = "dDate"
         const val KEY_TOTAL_MOVES = "tMoves"
-        const val KEY_LIVE_SEED = "liveSeed"
     }
 }

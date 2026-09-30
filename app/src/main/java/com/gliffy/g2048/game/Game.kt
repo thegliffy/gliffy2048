@@ -46,8 +46,18 @@ object Game {
         var won: Boolean = false
         val tiles: ArrayList<Tile> = ArrayList()
 
+        /** O(1) cell lookup, kept in sync with [tiles] by [reindex]. */
+        private var grid = Array(size) { arrayOfNulls<Tile>(size) }
+
+        /** Rebuild the cell index from [tiles]. Call after any list mutation. */
+        fun reindex() {
+            grid = Array(size) { arrayOfNulls<Tile>(size) }
+            for (t in tiles) if (t.row in 0 until size && t.col in 0 until size)
+                grid[t.row][t.col] = t
+        }
+
         fun cellAt(row: Int, col: Int): Tile? =
-            tiles.firstOrNull { it.row == row && it.col == col }
+            if (row in 0 until size && col in 0 until size) grid[row][col] else null
 
         fun freeCells(): ArrayList<Pair<Int, Int>> {
             val occ = BooleanArray(size * size)
@@ -60,9 +70,10 @@ object Game {
 
         /** Any like-valued pair of adjacent cells (== mergeable). */
         fun hasStuckPair(): Boolean {
-            for (t in tiles) {
-                if (t.col + 1 < size && cellAt(t.row, t.col + 1)?.value == t.value) return true
-                if (t.row + 1 < size && cellAt(t.row + 1, t.col)?.value == t.value) return true
+            for (r in 0 until size) for (c in 0 until size) {
+                val t = grid[r][c] ?: continue
+                if (c + 1 < size && grid[r][c + 1]?.value == t.value) return true
+                if (r + 1 < size && grid[r + 1][c]?.value == t.value) return true
             }
             return false
         }
@@ -76,11 +87,15 @@ object Game {
             s.keepGoing = keepGoing
             s.won = won
             for (t in tiles) s.tiles.add(Tile(t.id, t.row, t.col, t.value))
+            s.reindex()
             return s
         }
 
         /** size;score;moves;keep;won;daily;rngseed|id:r:c:v,id:r:c:v,...  */
-        fun serialize(): String {
+        fun serialize(): String = FORMAT_V1 + serializeBody()
+
+        /** Body without the format tag (kept so old v0 strings still parse). */
+        private fun serializeBody(): String {
             val head = listOf(size, score, movesMade,
                 if (keepGoing) 1 else 0,
                 if (won) 1 else 0,
@@ -92,9 +107,14 @@ object Game {
         }
 
         companion object {
+            /** Save-format tag. Bump when the layout changes; old tags keep
+             *  parsing via their own branch so upgrades never wipe a game. */
+            const val FORMAT_V1 = "v1;"
+
             fun deserialize(s: String): State? {
                 return try {
-                val parts = s.split("|")
+                val body = if (s.startsWith(FORMAT_V1)) s.substring(FORMAT_V1.length) else s
+                val parts = body.split("|")
                 if (parts.size != 2) return null
                 val f = parts[0].split(";")
                 if (f.size != 7) return null
@@ -107,9 +127,15 @@ object Game {
                     if (rec.isEmpty()) continue
                     val g = rec.split(":")
                     if (g.size != 4) return null
-                    st.tiles.add(Tile(g[0].toInt(), g[1].toInt(), g[2].toInt(), g[3].toInt()))
+                    val t = Tile(g[0].toInt(), g[1].toInt(), g[2].toInt(), g[3].toInt())
+                    // Reject out-of-bounds tiles explicitly: the freeCells
+                    // count check below would otherwise let a full board
+                    // with an OOB tile slip through and corrupt play.
+                    if (t.row !in 0 until st.size || t.col !in 0 until st.size) return null
+                    st.tiles.add(t)
                 }
                 if (st.freeCells().size + st.tiles.size != st.size * st.size) return null
+                st.reindex()
                 st
             } catch (e: Exception) {
                 null
@@ -133,6 +159,7 @@ object Game {
             val m = tiles.maxOfOrNull { it.id } ?: 0
             val t = Tile(m + 1, r, c, value)
             tiles.add(t)
+            grid[r][c] = t
             return t
         }
     }
@@ -192,13 +219,18 @@ object Game {
         if (!any) return null
 
         st.tiles.removeAll(gone.toHashSet())
+        st.reindex()
         st.score += gained
         st.movesMade += 1
-        val added = st.spawnOne()
-            ?: return Move(before, slid, mergedInto, mlist,
-                Tile(-1, -1, -1, 0), gained, st.won, st.isOver())
+        // Latch the win BEFORE spawning: if this move both reaches 2048 and
+        // fills the board (spawn returns null), the win must still be
+        // reported and saved instead of being swallowed by the game-over
+        // early-return below.
         val wonNow = !before.won && st.tiles.any { it.value >= WIN_VALUE }
         if (wonNow) st.won = true
+        val added = st.spawnOne()
+            ?: return Move(before, slid, mergedInto, mlist,
+                Tile(-1, -1, -1, 0), gained, wonNow, st.isOver())
         return Move(before, slid, mergedInto, mlist, added, gained, wonNow, st.isOver())
     }
 }

@@ -48,6 +48,10 @@ class GameMachine(
     private val haptics: HapticsController,
     private val audio: AudioController,
 ) {
+    init {
+        // Let MainActivity flush live state on onStop().
+        com.gliffy.g2048.Game2048App.instance.liveMachine = this
+    }
     private val UNDO_CAP = 40
 
     private val undo = ArrayDeque<Game.State>()
@@ -128,10 +132,15 @@ class GameMachine(
         startFresh(asDaily)
     }
 
-    /** Pick the board size for the next fresh game; immediately fresh board. */
-    fun chooseSize(size: Int) {
+    /** Pick the board size for the next fresh game; immediately fresh board.
+     *  Returns false if a game is in progress and the caller must confirm
+     *  first (changing size restarts the game). */
+    fun chooseSize(size: Int, force: Boolean = false): Boolean {
+        if (size == live.size) return true
+        if (!force && live.movesMade > 0 && !live.isOver()) return false
         prefs.startSize = size.coerceIn(3, 6)
         startFresh(prefs.daily)
+        return true
     }
 
     fun setSound(on: Boolean) { prefs.soundOn = on; audio.setEnabled(on) }
@@ -201,7 +210,6 @@ class GameMachine(
     fun onPauseSave() { persist() }
     private fun persist() {
         prefs.liveState = live.serialize()
-        prefs.liveSeed = live.rng.state.toString()
     }
 
     private fun bump() {

@@ -1,8 +1,6 @@
 package com.gliffy.g2048.ui
 
 import com.gliffy.g2048.game.Dir
-import com.gliffy.g2048.game.Game
-import com.gliffy.g2048.game.Rng
 import com.gliffy.g2048.game.Tile
 
 /**

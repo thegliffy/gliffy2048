@@ -4,10 +4,10 @@ package com.gliffy.g2048.game
  *  snapshotted for undo and replayed identically for Daily seeds. */
 class Rng(var state: Long) {
     fun nextLong(): Long {
-        state += java.math.BigInteger("9E3779B97F4A7C15",16).toLong()
+        state += -7046029254386353131L // 0x9E3779B97F4A7C15 as signed Long
         var z = state
-        z = (z xor (z ushr 30)) * java.math.BigInteger("BF58476D1CE4E5B9",16).toLong()
-        z = (z xor (z ushr 27)) * java.math.BigInteger("94D049BB133111EB",16).toLong()
+        z = (z xor (z ushr 30)) * -4658895280553007687L // 0xBF58476D1CE4E5B9
+        z = (z xor (z ushr 27)) * -7723592293110705685L // 0x94D049BB133111EB
         return z xor (z ushr 31)
     }
 

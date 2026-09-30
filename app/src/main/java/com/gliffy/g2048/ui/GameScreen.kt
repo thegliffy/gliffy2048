@@ -49,7 +49,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.gliffy.g2048.Game2048App
-import com.gliffy.g2048.game.GameMode
 
 /**
  * Whole-app game screen. [GameMachine] is created once (remember) and
@@ -379,6 +378,7 @@ private fun SettingsOverlay(
     machine: GameMachine,
     onDismiss: () -> Unit,
 ) {
+    var pendingSize by remember { mutableStateOf<Int?>(null) }
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -417,8 +417,34 @@ private fun SettingsOverlay(
                             text = name,
                             selected = ui.state.size == size,
                             isDark = isDark,
-                            onClick = { machine.uiTap(); machine.chooseSize(size) },
+                            onClick = {
+                                machine.uiTap()
+                                if (!machine.chooseSize(size)) {
+                                    // in-progress game: ask before restarting
+                                    pendingSize = size
+                                }
+                            },
                         )
+                    }
+                }
+                if (pendingSize != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Changing board size restarts the game.",
+                        fontSize = 12.sp,
+                        color = if (isDark) Palette.textSubDark else Palette.textSubLight,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = {
+                            machine.uiTap()
+                            pendingSize = null
+                        }) { Text("Cancel") }
+                        Button(onClick = {
+                            machine.uiTap()
+                            machine.chooseSize(pendingSize!!, force = true)
+                            pendingSize = null
+                        }) { Text("Restart at new size") }
                     }
                 }
                 Spacer(Modifier.height(14.dp))
@@ -452,13 +478,6 @@ private fun SettingsOverlay(
         }
     }
 }
-
-/** Reads settings from Game2048 (stable singletons) as needed. */
-@Suppress("unused")
-private fun machineUiRead(ui: UiSnap, slot: Int): Int =
-    when (slot) { 1 -> if (com.gliffy.g2048.Game2048App.instance.prefs.soundOn) 1 else 0
-                   2 -> if (com.gliffy.g2048.Game2048App.instance.prefs.hapticsOn) 1 else 0
-                   else -> 0 }
 
 @Composable
 private fun Chip(
@@ -511,7 +530,4 @@ private fun ToggleRow(
         Switch(checked = checked, onCheckedChange = { if (it) on() else off() })
     }
 }
-
-@Suppress("unused")
-private fun extraNote(): Int = 0
 
