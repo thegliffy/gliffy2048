@@ -79,9 +79,15 @@ fun BoardPanel(
     // (slide + merge pop + spawn open) has fully played out.
     var animating by remember { mutableStateOf(false) }
 
-    LaunchedEffect(snap.revision) {
-        val fxSeq = (ev?.seq ?: spawnEv?.seq)?.toInt() ?: 0
-        if (fxSeq != lastFxSeq && (ev != null || spawnEv != null)) {
+    // Keyed on the FX sequence, NOT snap.revision: bump() re-emits a new
+    // revision when the animation settles, and re-running this effect on
+    // that revision would snapTo(0) again and restart the pass forever —
+    // the spawn tile would never finish opening and input would stay
+    // locked. Each fxSeq animates exactly once.
+    val fxSeq = (ev?.seq ?: spawnEv?.seq)?.toInt() ?: 0
+
+    LaunchedEffect(fxSeq) {
+        if (fxSeq != 0 && fxSeq != lastFxSeq && (ev != null || spawnEv != null)) {
             lastFxSeq = fxSeq
             animating = true
             p.snapTo(0f)
@@ -268,12 +274,15 @@ internal fun TileGlyph(
     bg: Color,
     fg: Color,
 ) {
-    // Auto-fit: the colored tile fills the whole cell; the number is a
-    // modest, clearly readable label centered inside it — NOT filling the
-    // square. v1.1.5: user wants the color to dominate (~99% of the cell)
-    // with the digits just legible on top.
+    // Classic 2048 look: the colored tile fills the whole cell, and the
+    // number is a bold, comfortable label centered on it — clearly legible
+    // but NOT filling the square.
+    //
+    // v1.1.5 (0.34f) was too small to read at a glance; v1.1.3 (90% fill)
+    // was too big. This sits between: digits ~55% of the tile height with
+    // a solid margin inside the color.
     val digits = value.toString().length
-    val fontSize = minOf(cell.value * 0.34f, cell.value / (digits * 1.7f)).sp
+    val fontSize = minOf(cell.value * 0.55f / 0.72f, cell.value / (digits * 1.15f)).sp
     Box(
         modifier = Modifier
             .offset(x = x, y = y)
