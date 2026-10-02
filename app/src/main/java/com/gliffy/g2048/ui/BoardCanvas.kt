@@ -268,22 +268,12 @@ internal fun TileGlyph(
     bg: Color,
     fg: Color,
 ) {
-    // Auto-fit: scale the glyph so the number fills the tile's inner square
-    // — as large as it can get while guaranteed to fit (height-cap for short
-    // numbers, width-cap for long ones).
-    //
-    // The cap uses the font's ASCENT (the visual top of digits) rather than
-    // the full line box: Compose centers the whole line box, which includes
-    // descent + leading, so a line-box-sized number only paints ~70% of the
-    // tile height. Digits sit between baseline and ascent, so sizing the
-    // ascent to the inner square makes short numbers genuinely fill it.
-    //
-    // v1.1.4: the v1.1.3 fill (inner = 90% of cell) was too aggressive —
-    // digits touched the tile edges. Back off to ~78% of the cell so the
-    // number fills the tile with a visible margin inside the colored square.
+    // Auto-fit: the colored tile fills the whole cell; the number is a
+    // modest, clearly readable label centered inside it — NOT filling the
+    // square. v1.1.5: user wants the color to dominate (~99% of the cell)
+    // with the digits just legible on top.
     val digits = value.toString().length
-    val inner = cell.value * 0.78f
-    val fontSize = minOf(inner / 0.72f, inner / (digits * 0.58f)).sp
+    val fontSize = minOf(cell.value * 0.34f, cell.value / (digits * 1.7f)).sp
     Box(
         modifier = Modifier
             .offset(x = x, y = y)
