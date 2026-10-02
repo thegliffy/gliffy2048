@@ -277,8 +277,12 @@ internal fun TileGlyph(
     // descent + leading, so a line-box-sized number only paints ~70% of the
     // tile height. Digits sit between baseline and ascent, so sizing the
     // ascent to the inner square makes short numbers genuinely fill it.
+    //
+    // v1.1.4: the v1.1.3 fill (inner = 90% of cell) was too aggressive —
+    // digits touched the tile edges. Back off to ~78% of the cell so the
+    // number fills the tile with a visible margin inside the colored square.
     val digits = value.toString().length
-    val inner = cell.value * 0.90f
+    val inner = cell.value * 0.78f
     val fontSize = minOf(inner / 0.72f, inner / (digits * 0.58f)).sp
     Box(
         modifier = Modifier
