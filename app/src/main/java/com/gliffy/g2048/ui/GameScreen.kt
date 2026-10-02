@@ -151,14 +151,25 @@ fun GameScreen() {
                 Spacer(Modifier.height(10.dp))
 
                 // ---- board ----
-                BoardPanel(
-                    snap = ui,
-                    enabled = !ui.state.isOver() &&
-                        !ui.state.won || ui.state.keepGoing,
-                    isDark = isDark,
-                    onMove = machine::tryMove,
-                    onAnimSettled = machine::onAnimSettled,
-                )
+                // Keep the board a true square: fill the remaining height but
+                // cap width so aspectRatio(1f) never gets squeezed by the
+                // header/score rows (which would letterbox the grid and make
+                // tiles appear mid-row).
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    BoardPanel(
+                        snap = ui,
+                        enabled = !ui.state.isOver() &&
+                            !ui.state.won || ui.state.keepGoing,
+                        isDark = isDark,
+                        onMove = machine::tryMove,
+                        onAnimSettled = machine::onAnimSettled,
+                    )
+                }
             }
 
             // ---- main menu overlay ----
