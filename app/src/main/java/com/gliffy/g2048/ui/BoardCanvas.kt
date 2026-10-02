@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -31,7 +32,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -71,12 +74,19 @@ fun BoardPanel(
     var lastFxSeq by remember { mutableIntStateOf(-1) }
     val p = remember { Animatable(1f) }
 
+    // The animation clock: one 0→1 pass per animated revision. `animating`
+    // stays true for the whole pass so input can be locked until the move
+    // (slide + merge pop + spawn open) has fully played out.
+    var animating by remember { mutableStateOf(false) }
+
     LaunchedEffect(snap.revision) {
         val fxSeq = (ev?.seq ?: spawnEv?.seq)?.toInt() ?: 0
         if (fxSeq != lastFxSeq && (ev != null || spawnEv != null)) {
             lastFxSeq = fxSeq
+            animating = true
             p.snapTo(0f)
             p.animateTo(1f, animationSpec = tween(240, easing = FastOutSlowInEasing))
+            animating = false
         }
         if (!snap.animSettled) onAnimSettled()
     }
@@ -84,13 +94,17 @@ fun BoardPanel(
     val slideT = (v * 2f).coerceIn(0f, 1f)
     val popT = ((v - 0.5f) * 2f).coerceIn(0f, 1f)
 
+    // Input is accepted only while the board is idle: a swipe/keypress during
+    // an animation would skip the spawn "open" of the previous move.
+    val inputEnabled = enabled && !animating
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(1f)
             .onSizeChanged { boardPx = it.width }
-            .pointerInput(enabled) {
-                if (!enabled) return@pointerInput
+            .pointerInput(inputEnabled) {
+                if (!inputEnabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown()
                     val sx = down.position.x
@@ -118,7 +132,7 @@ fun BoardPanel(
             }
             .focusable()
             .onPreviewKeyEvent { ev ->
-                if (!enabled) return@onPreviewKeyEvent false
+                if (!inputEnabled) return@onPreviewKeyEvent false
                 if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val d = when (ev.key) {
                     Key.DirectionUp -> Dir.UP
@@ -257,11 +271,15 @@ internal fun TileGlyph(
     // Auto-fit: scale the glyph so the number fills the tile's inner square
     // — as large as it can get while guaranteed to fit (height-cap for short
     // numbers, width-cap for long ones).
+    //
+    // The cap uses the font's ASCENT (the visual top of digits) rather than
+    // the full line box: Compose centers the whole line box, which includes
+    // descent + leading, so a line-box-sized number only paints ~70% of the
+    // tile height. Digits sit between baseline and ascent, so sizing the
+    // ascent to the inner square makes short numbers genuinely fill it.
     val digits = value.toString().length
-    val inner = cell.value * 0.84f
-    val hFit = inner * 0.82f
-    val wFit = inner / (digits * 0.58f)
-    val fontSize = minOf(hFit, wFit).sp
+    val inner = cell.value * 0.90f
+    val fontSize = minOf(inner / 0.72f, inner / (digits * 0.58f)).sp
     Box(
         modifier = Modifier
             .offset(x = x, y = y)
@@ -282,6 +300,15 @@ internal fun TileGlyph(
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
                 maxLines = 1,
+                // Tight line box: drop font padding/leading and align the
+                // glyph box to the line box so the digits fill the tile
+                // instead of floating inside a taller text box.
+                style = TextStyle(
+                    lineHeightStyle = LineHeightStyle(
+                        alignment = LineHeightStyle.Alignment.Center,
+                        trim = LineHeightStyle.Trim.Both,
+                    ),
+                ),
             )
         }
     }
