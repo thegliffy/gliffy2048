@@ -12,8 +12,8 @@ android {
         applicationId = "com.gliffy.g2048"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.1.5"
+        versionCode = 10
+        versionName = "1.1.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
